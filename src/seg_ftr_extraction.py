@@ -37,12 +37,13 @@ def get_segment_features(y, sample_rate, frame_length=0.025, hop_length=0.010, f
 	frame_features_mfcc_d = mfcc_d.T
 	frame_features_mfcc_dd = mfcc_dd.T
 
-	threshold = 0.15
+	threshold = 0.015
+	# threshold = 0.0
 
 	frame_features_pitch = np.empty((0,2))
 	for frame in frames:
 
-		if np.max(frame) < threshold:
+		if np.max(frame) < threshold or np.min(frame) > threshold:
 			frame_features_pitch = np.vstack((frame_features_pitch, [np.nan, np.nan]))
 			continue
 
@@ -96,14 +97,19 @@ def get_feature_pitch_period(frame, sample_rate):
 
 def get_feature_hnr(frame, sample_rate, pitch_period):
 
+	if np.isnan(pitch_period):
+		return [np.nan]
+
 	def autocorr(frame,t):
 		return [np.corrcoef(frame[0:frame.size-t],frame[t:frame.size])[0,1]]
 
 	tau = np.rint(sample_rate/pitch_period).astype(int)
 
-	acf_0 = np.abs(autocorr(frame,0))
-	acf_tau = np.abs(autocorr(frame,tau))
-
-	hnr = 10*np.log(acf_tau/(acf_0 - acf_tau))
+	try:
+		acf_0 = np.abs(autocorr(frame,0))
+		acf_tau = np.abs(autocorr(frame,tau))
+		hnr = 10*np.log(acf_tau/(acf_0 - acf_tau))
+	except ValueError as e:
+		hnr = [np.nan]
 
 	return hnr
