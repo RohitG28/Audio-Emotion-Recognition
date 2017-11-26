@@ -37,14 +37,16 @@ def get_segment_features(y, sample_rate, frame_length=0.025, hop_length=0.010, f
 	frame_features_mfcc_d = mfcc_d.T
 	frame_features_mfcc_dd = mfcc_dd.T
 
+	threshold = 0.15
+
 	frame_features_pitch = np.empty((0,2))
 	for frame in frames:
+
+		if np.max(frame) < threshold:
+			frame_features_pitch = np.vstack((frame_features_pitch, [np.nan, np.nan]))
+			continue
+
 		feature_pitch_period = get_feature_pitch_period(frame, sample_rate)
-
-		# Too noisy sample
-		if np.nan in feature_pitch_period:
-			return []
-
 		feature_hnr = get_feature_hnr(frame, sample_rate, feature_pitch_period[0])
 
 		feature_pitch = np.concatenate([feature_pitch_period, feature_hnr])
@@ -62,6 +64,11 @@ def get_segment_features(y, sample_rate, frame_length=0.025, hop_length=0.010, f
 	for i in range(frames_per_segment//2, len(frame_features)-frames_per_segment//2):
 		w = frames_per_segment//2
 		feature = np.ravel(frame_features[i-w:i-w+frames_per_segment])
+
+		# Discrad invalid segment
+		if np.isnan(feature).any():
+			continue
+
 		segment_features = np.vstack((segment_features, feature))
 
 	# print("Num of segments", len(segment_features))
@@ -80,6 +87,7 @@ def get_feature_pitch_period(frame, sample_rate):
 		idx_hi_second = np.argmax(corr[idx_low_first:]) + idx_low_first
 	except IndexError as e:
 		return [np.nan]
+		# Noisy?
 
 	pitch_period = sample_rate/idx_hi_second
 
