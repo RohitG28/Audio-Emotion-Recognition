@@ -3,9 +3,11 @@ import numpy as np
 import ast
 import shutil
 import zipfile
+import os
+from utterFtrExtraction import getUtteranceFeature
 
-maxEpochs = 3
-batchSize = 1000
+maxEpochs = 2
+batchSize = 10000
 inputNodes = 480
 outputNodes = 5
 layer = [inputNodes, 50, 50, 50, outputNodes]
@@ -51,7 +53,7 @@ def trainNetwork(data):
 		sess.run(tf.global_variables_initializer())
 		for epoch in range(maxEpochs):
 			epoch_loss = 0
-			f = open("segmentLabels/1F2.txt")
+			f = open("segmentLabels/merged.txt")
 			lines = f.readlines()
 			f.close()
 			for k in range((len(lines)/batchSize)):
@@ -84,27 +86,37 @@ def storeModel(session,filename):
 	shutil.make_archive(filename, 'zip', "./temp")
 	shutil.rmtree("./temp")
 
-def predict(data,outputFileName,storeLabels=True):
+def sortFunc(inputString):
+	return int(inputString[:-4])
+
+def predict(data, inputPath, outputFileName, threshold = 5, storeLabels=True):
 	prediction = neuralNetworkModel(data)
 	with tf.Session() as sess:
 		sess = restoreModel(sess,"storedParameters")
-		f = open("segmentLabels/1F1.txt")
-		lines = f.readlines()
-		f.close()
 		out = open(outputFileName,'wa')
-		
-		for line in lines:
-			epoch_x = [np.array(ast.literal_eval(line)[0])]
-			if storeLabels:
-				epoch_y = ast.literal_eval(line)[1]
-			else:
+		files = sorted(os.listdir(inputPath),key = sortFunc)
+		for fileName in files:
+			if (os.stat(inputPath + fileName).st_size != 0):
+				f = open(inputPath+fileName)
+				lines = f.readlines()
+				f.close()
+				epoch_x = []
 				epoch_y = []
-			result = sess.run(prediction,feed_dict = {x : epoch_x})
-			# print(result[0])
-			# out.write(str(result[0].tolist()))
-			out.write(str([result[0].tolist(),epoch_y]))
-			out.write('\n')
+				for line in lines:
+					epoch_x.append(np.array(ast.literal_eval(line)[0]))
+					epoch_y.append(ast.literal_eval(line)[1])
+
+				result = sess.run(prediction,feed_dict = {x : epoch_x})
+				utteranceFeatures = getUtteranceFeature(result,threshold)
+		
+				if (not storeLabels):
+					epoch_y = ['NA']
+				label = epoch_y[0]
+
+				out.write(str([utteranceFeatures,label]))
+				out.write('\n')
+				print(fileName)		
 		out.close()
 
 # trainNetwork(x)
-predict(x,"output.txt")
+predict(x,"segmentLabels/","utteranceFeatures/utteranceFeatures.txt",storeLabels=True)
