@@ -6,11 +6,11 @@ import zipfile
 import os
 from utterFtrExtraction import getUtteranceFeature
 
-maxEpochs = 2
+maxEpochs = 10
 batchSize = 10000
-inputNodes = 480
+inputNodes = 1550
 outputNodes = 5
-layer = [inputNodes, 50, 50, 50, outputNodes]
+layer = [inputNodes, 250, 250, 250, outputNodes]
 
 x = tf.placeholder(tf.float32, [None, inputNodes])
 y = tf.placeholder(tf.float32, [None, outputNodes])
@@ -42,6 +42,7 @@ def neuralNetworkModel(data):
 
 	return output
 
+# function to train the network
 def trainNetwork(data):
 	prediction = neuralNetworkModel(data)
 	cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = prediction, labels = y))
@@ -51,11 +52,12 @@ def trainNetwork(data):
 
 	with tf.Session() as sess:
 		sess.run(tf.global_variables_initializer())
+		f = open("segmentLabels1/merged1500.txt")
+		lines = f.readlines()
+		print("file read complete")
+		f.close()
 		for epoch in range(maxEpochs):
 			epoch_loss = 0
-			f = open("segmentLabels/merged.txt")
-			lines = f.readlines()
-			f.close()
 			for k in range((len(lines)/batchSize)):
 				batchLines = lines[k:k+batchSize]
 				epoch_x = []
@@ -89,6 +91,7 @@ def storeModel(session,filename):
 def sortFunc(inputString):
 	return int(inputString[:-4])
 
+# function to predict the output given input
 def predict(data, inputPath, outputFileName, threshold = 5, storeLabels=True):
 	prediction = neuralNetworkModel(data)
 	with tf.Session() as sess:
@@ -118,5 +121,5 @@ def predict(data, inputPath, outputFileName, threshold = 5, storeLabels=True):
 				print(fileName)		
 		out.close()
 
-# trainNetwork(x)
-predict(x,"segmentLabels/","utteranceFeatures/utteranceFeatures.txt",storeLabels=True)
+trainNetwork(x)
+# predict(x,"segmentLabels/","utteranceFeatures/utteranceFeatures.txt",storeLabels=True)

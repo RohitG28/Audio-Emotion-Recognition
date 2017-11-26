@@ -2,12 +2,9 @@ import sys
 import ast
 import numpy as np
 from sklearn import model_selection, svm
-# from sklearn.naive_bayes import BernoulliNB, GaussianNB, MultinomialNB
 from time import time
 
 file_in = "utteranceFeatures/utteranceFeatures.txt"
-
-# rows_max = 1000
 
 f = open(file_in,'r')
 
@@ -25,15 +22,10 @@ start_time = time()
 
 X_train, X_test, y_train, y_test = model_selection.train_test_split(utteranceFeatures, labels, test_size=0.2)
 
-# clf1 = MultinomialNB()
-# clf1.fit(X_train, y_train)
-# end_time = time()
-# score1 = clf1.score(X_test, y_test)
-
-clf2 = svm.SVC()
-clf2.fit(X_train, y_train)
+clf = svm.SVC()
+clf.fit(X_train, y_train)
 end_time = time()
-score2 = clf2.score(X_test, y_test)
+score = clf.score(X_test, y_test)
 
 
-print(score2, end_time - start_time)
+print(score, end_time - start_time)
