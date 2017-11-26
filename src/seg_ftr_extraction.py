@@ -9,58 +9,84 @@ import librosa
 
 def get_segment_features_from_file(filename, sample_rate=16000):
 	y,_ = librosa.core.load(filename, sample_rate)
-	yt,_ = y_trim, idx = librosa.effects.trim(y, top_db=5)
+	return get_segment_features(y, sample_rate)
+
+
+def get_segment_features(y, sample_rate, frame_length=0.025, hop_length=0.010, frames_per_segment=25):
+
+	frame_length_s = int(sample_rate * frame_length)
+	hop_length_s = int(sample_rate * hop_length)
+	# print("frame_length_s:", frame_length_s)
+	# print("hop_length_s:", hop_length_s)
+
+	yt,_ = librosa.effects.trim(y, top_db=5)
 	# print("Len: Original", len(y), "Trimmed", len(yt))
-	return get_segment_features(yt, sample_rate)
+
+	# Pad with zeros, to match behaviour of mfcc with yt while getting frames from yp
+	yp = np.concatenate([np.zeros(frame_length_s//2), yt, np.zeros(frame_length_s//2)]) 	
+
+	frames = librosa.util.frame(yp,frame_length_s, hop_length_s)
+	frames = frames.T
 
 
-def get_segment_features(y, sample_rate, frame_width=0.025, frame_interval=0.010, frames_per_segment=25):
-	
-	frame_width_s = int(sample_rate * frame_width)
-	frame_interval_s = int(sample_rate * frame_interval)
+	mfcc = librosa.feature.mfcc(y=yt, sr=sample_rate, n_fft=frame_length_s, hop_length=hop_length_s)	
+	mfcc_d = librosa.feature.delta(mfcc)
+	mfcc_dd = librosa.feature.delta(mfcc, order=2)
 
-	# print("frame_width_s:", frame_width_s)
-	# print("frame_interval_s:", frame_interval_s)
+	frame_features_mfcc = mfcc.T
+	frame_features_mfcc_d = mfcc_d.T
+	frame_features_mfcc_dd = mfcc_dd.T
 
-	signal_length = len(y)
-
-	frame_features = []
-	for i in np.arange(0, signal_length - frame_width_s , frame_interval_s):
-		frame = y[i:i+frame_width_s]
-		
-		feature_mfcc = get_feature_mfcc(frame, sample_rate)
+	frame_features_pitch = np.empty((0,2))
+	for frame in frames:
 		feature_pitch_period = get_feature_pitch_period(frame, sample_rate)
-		feature_hnr = get_feature_hnr(frame, sample_rate)
+		feature_hnr = get_feature_hnr(frame, sample_rate, feature_pitch_period[0])
 
-		feature = np.concatenate([feature_mfcc, feature_pitch_period, feature_hnr])
-		frame_features.append(feature)
+		feature_pitch = np.concatenate([feature_pitch_period, feature_hnr])
+		frame_features_pitch = np.vstack((frame_features_pitch, feature_pitch))
+	# print("Num of frames:", len(frame_features_pitch))
 
-	# print("Num of frames:", len(frame_features))
 
-	segment_features = []
+	frame_features = np.hstack((frame_features_pitch,frame_features_mfcc,frame_features_mfcc_d,frame_features_mfcc_dd))
+
+	# Remove features of frames which were added by np.zeros()
+	num_frames_remove = np.ceil(frame_length_s/2/hop_length_s).astype(int)
+	frame_features = frame_features[num_frames_remove:-num_frames_remove,:]
+
+	segment_features = np.empty((0, frame_features.shape[1]*frames_per_segment ))
 	for i in range(frames_per_segment//2, len(frame_features)-frames_per_segment//2):
-		# print("*", end="", flush=True)
 		w = frames_per_segment//2
-		feature = np.concatenate(frame_features[i-w:i+w])
-		segment_features.append(feature)
+		feature = np.ravel(frame_features[i-w:i-w+frames_per_segment])
+		segment_features = np.vstack((segment_features, feature))
 
 	# print("Num of segments", len(segment_features))
 
 	return segment_features
 
 
-def get_feature_mfcc(frame, sample_rate):
-	mfcc = librosa.feature.mfcc(frame, sample_rate)
-	return np.ravel(mfcc)
-
-
 def get_feature_pitch_period(frame, sample_rate):
-	return []
+	corr = np.correlate(frame, frame, "same")
+	corr = corr[len(corr)//2:]
+
+	corr_diff = np.diff(corr)
+	idx_low_first = np.where(corr_diff > 0)[0][0]
+	idx_hi_second = np.argmax(corr[idx_low_first:]) + idx_low_first
+
+	pitch_period = sample_rate/idx_hi_second
+
+	return [pitch_period]
 
 
-def get_feature_hnr(frame, sample_rate):
-	return []
+def get_feature_hnr(frame, sample_rate, pitch_period):
 
+	def autocorr(frame,t):
+		return [np.corrcoef(frame[0:frame.size-t],frame[t:frame.size])[0,1]]
 
-def trim_signal(y):
-	pass
+	tau = np.rint(sample_rate/pitch_period).astype(int)
+
+	acf_0 = np.abs(autocorr(frame,0))
+	acf_tau = np.abs(autocorr(frame,tau))
+
+	hnr = 10*np.log(acf_tau/(acf_0 - acf_tau))
+
+	return hnr
